@@ -1,0 +1,28 @@
+{
+  "name": "muscu",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Carnet de musculation PWA, chiffré et hors ligne",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "icons": "pwa-assets-generator"
+  },
+  "dependencies": {
+    "@preact/signals": "^2.11.4",
+    "chart.js": "^4.6.1",
+    "preact": "^11.1.0"
+  },
+  "devDependencies": {
+    "@preact/preset-vite": "^2.10.6",
+    "@vite-pwa/assets-generator": "^2.0.0",
+    "fake-indexeddb": "^6.2.6",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.5",
+    "vite-plugin-pwa": "^2.0.0",
+    "vitest": "^5.0.5"
+  }
+}
