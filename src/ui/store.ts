@@ -1,12 +1,14 @@
-// État global : données déchiffrées en mémoire, annuler / rétablir,
-// sauvegarde chiffrée en continu.
+// État global : données en mémoire, annuler / rétablir,
+// sauvegarde locale en continu.
 import { computed, signal } from '@preact/signals'
 import { programWeek, todayISO } from '../domain/format'
 import type { AppData, Session } from '../domain/types'
+import { normalizeData } from '../db/backup'
 import { Vault } from '../db/vault'
+import { initialData } from '../seed/initial'
 import { buildDemoData } from '../seed/demo'
 
-export type Phase = 'loading' | 'setup' | 'locked' | 'app'
+export type Phase = 'loading' | 'migrate' | 'app'
 
 export const vault = new Vault('muscu')
 export const phase = signal<Phase>('loading')
@@ -14,7 +16,7 @@ export const demo = signal(false)
 export const data = signal<AppData | null>(null)
 export const saveError = signal<string | null>(null)
 
-/** Accès non nul, réservé aux écrans affichés une fois déverrouillé. */
+/** Accès non nul, réservé aux écrans affichés une fois les données chargées. */
 export const D = () => data.value as AppData
 
 const undoStack: { label: string; snap: AppData }[] = []
@@ -28,7 +30,7 @@ function refreshHistory() {
 
 /**
  * Seule façon de modifier les données : copie, applique, empile pour
- * l'annulation, puis enregistre (chiffré) en arrière-plan.
+ * l'annulation, puis enregistre en arrière-plan.
  * `undoable: false` pour les saisies de champ qui ne méritent pas d'étape.
  */
 export function mutate(label: string, fn: (d: AppData) => void, opts: { undoable?: boolean } = {}) {
@@ -75,16 +77,18 @@ function clearHistory() {
 // ---------- Sauvegarde ----------
 
 let timer: ReturnType<typeof setTimeout> | null = null
+// Lecture impossible au démarrage : on n'écrit plus rien pour ne pas écraser les données.
+let readFailed = false
 
 function scheduleSave() {
-  if (demo.value) return // le mode démo ne touche jamais au stockage
+  if (demo.value || readFailed) return // le mode démo ne touche jamais au stockage
   if (timer) clearTimeout(timer)
   timer = setTimeout(saveNow, 250)
 }
 
 export async function saveNow() {
   if (timer) { clearTimeout(timer); timer = null }
-  if (demo.value || !data.value || !vault.unlocked) return
+  if (demo.value || readFailed || !data.value) return
   try {
     await vault.save(data.value)
     saveError.value = null
@@ -103,10 +107,16 @@ if (typeof document !== 'undefined') {
 
 export async function boot() {
   try {
-    phase.value = (await vault.exists()) ? 'locked' : 'setup'
-  } catch {
-    phase.value = 'setup'
+    const saved = await vault.load<AppData>()
+    if (saved) return enterApp(normalizeData(saved))
+    if (await vault.hasLegacy()) { phase.value = 'migrate'; return }
+  } catch (e) {
+    readFailed = true
+    saveError.value = `Lecture des données impossible (${(e as Error).message}). Rien ne sera enregistré : ferme et rouvre l’app.`
   }
+  const d = initialData()
+  enterApp(d)
+  void saveNow()
 }
 
 export function enterApp(d: AppData, isDemo = false) {
@@ -114,22 +124,21 @@ export function enterApp(d: AppData, isDemo = false) {
   data.value = d
   clearHistory()
   phase.value = 'app'
-  // Au déverrouillage : reprise directe de la séance en cours, sinon l'accueil.
+  // À l'ouverture : reprise directe de la séance en cours, sinon l'accueil.
   location.hash = d.sessions.some((s) => s.status === 'active') ? '#/seance' : '#/'
 }
 
-export async function lock() {
+export async function startDemo() {
   await saveNow()
   await vault.flush()
-  vault.lock()
-  data.value = null
-  clearHistory()
-  phase.value = demo.value ? ((await vault.exists()) ? 'locked' : 'setup') : 'locked'
-  demo.value = false
+  enterApp(buildDemoData(), true)
 }
 
-export function startDemo() {
-  enterApp(buildDemoData(), true)
+/** Quitte le mode démo et recharge les vraies données. */
+export async function exitDemo() {
+  demo.value = false
+  phase.value = 'loading'
+  await boot()
 }
 
 // ---------- Dérivés pratiques ----------

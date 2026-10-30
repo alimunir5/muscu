@@ -1,4 +1,4 @@
-// Coquille de l'application : verrou, routes, navigation basse.
+// Coquille de l'application : routes, navigation basse.
 import { DialogHost, ToastHost } from './dialogs'
 import { Icon } from './components/common'
 import { ExercisePickerHost } from './components/ExercisePicker'
@@ -10,9 +10,9 @@ import { ExerciseDetail } from './screens/ExerciseDetail'
 import { HistoryList, SessionDetail } from './screens/History'
 import { Home } from './screens/Home'
 import { ImportScreen } from './screens/Import'
-import { LockScreen } from './screens/Lock'
+import { MigrateScreen } from './screens/Lock'
 import {
-  BackupSettings, ExerciseEdit, InputSettings, Library, ProgramSettings, RpeScale, SecuritySettings, SettingsHome,
+  BackupSettings, DataSettings, ExerciseEdit, InputSettings, Library, ProgramSettings, RpeScale, SettingsHome,
   TemplateEdit, TemplatesList, TrackedSettings,
 } from './screens/Settings'
 import { Workout } from './screens/Workout'
@@ -44,13 +44,13 @@ function Screen() {
   if (r === '/reglages/rpe') return <RpeScale />
   if (r === '/reglages/sauvegarde') return <BackupSettings />
   if (r === '/reglages/import') return <ImportScreen />
-  if (r === '/reglages/securite') return <SecuritySettings />
+  if (r === '/reglages/donnees') return <DataSettings />
   return <Home />
 }
 
 export function App() {
   if (phase.value === 'loading') return <div class="splash" aria-busy="true" />
-  if (phase.value !== 'app') return <><LockScreen /><DialogHost /></>
+  if (phase.value === 'migrate') return <><MigrateScreen /><DialogHost /></>
 
   const r = route.value
   const tabActive = (p: string) => (p === '/' ? r === '/' : r === p || r.startsWith(`${p}/`)

@@ -3,7 +3,7 @@ import type { ComponentChildren } from 'preact'
 import { useEffect, useState } from 'preact/hooks'
 import { fmtNum, parseDecimal } from '../../domain/format'
 import { toast } from '../dialogs'
-import { history, lock, redo, undo } from '../store'
+import { history, redo, undo } from '../store'
 
 const PATHS: Record<string, string> = {
   home: 'M3 11l9-8 9 8v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z',
@@ -42,7 +42,7 @@ export function Icon({ name, size = 22, label }: { name: keyof typeof PATHS | st
   )
 }
 
-/** Barre de titre avec annuler / rétablir / verrouiller. */
+/** Barre de titre avec annuler / rétablir. */
 export function TopBar({ title, backTo, actions }: { title: string; backTo?: () => void; actions?: ComponentChildren }) {
   const h = history.value
   return (
@@ -58,7 +58,6 @@ export function TopBar({ title, backTo, actions }: { title: string; backTo?: () 
           onClick={() => { const l = undo(); if (l) toast(`Annulé : ${l}`) }}><Icon name="undo" /></button>
         <button class="icon-btn" disabled={!h.redo} aria-label={h.redo ? `Rétablir : ${h.redo}` : 'Rien à rétablir'}
           onClick={() => { const l = redo(); if (l) toast(`Rétabli : ${l}`) }}><Icon name="redo" /></button>
-        <button class="icon-btn" onClick={() => void lock()} aria-label="Verrouiller"><Icon name="lock" /></button>
       </div>
     </header>
   )

@@ -66,7 +66,7 @@ export function Home() {
         {showExport && (
           <section class="card notice soft">
             <p>{s.lastExportAt ? `Dernier export il y a ${Math.floor(daysSinceExport)} jours.` : 'Tu n’as encore jamais exporté tes données.'}{' '}
-              Une sauvegarde te protège en cas de perte du téléphone ou d’oubli du mot de passe.</p>
+              Une sauvegarde te protège en cas de perte ou de changement de téléphone.</p>
             <button class="btn small" onClick={() => go('/reglages/sauvegarde')}>Exporter maintenant</button>
           </section>
         )}

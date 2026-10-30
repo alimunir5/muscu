@@ -1,5 +1,5 @@
 // Modèle de données de l'application. Tout est stocké dans un seul objet
-// AppData, chiffré au repos (voir src/db/vault.ts).
+// AppData, stocké localement (voir src/db/vault.ts).
 
 export type ID = string
 /** Date calendaire locale au format ISO « AAAA-MM-JJ ». */

@@ -1,6 +1,6 @@
 # Muscu — carnet de musculation (PWA)
 
-Application web de suivi de musculation, installable sur l'écran d'accueil, **100 % hors ligne** et **chiffrée sur l'appareil**. Elle remplace un classeur Excel (Dashboard, Bibliothèque & Réglages, Journal des séances).
+Application web de suivi de musculation, installable sur l'écran d'accueil, **100 % hors ligne**, avec des données qui restent **sur l'appareil**. Elle remplace un classeur Excel (Dashboard, Bibliothèque & Réglages, Journal des séances).
 
 - **Stack** : Vite + TypeScript + Preact (+ signals), Chart.js chargé à la demande, IndexedDB, Web Crypto, vite-plugin-pwa (Workbox).
 - **Aucun backend.** Le dépôt ne contient que du code : aucun mot de passe, aucune donnée, aucune clé.
@@ -13,7 +13,7 @@ Application web de suivi de musculation, installable sur l'écran d'accueil, **1
 4. [Installer l'app sur iPhone / Android](#installer-lapp-sur-iphone--android)
 5. [Sauvegarder et restaurer](#sauvegarder-et-restaurer)
 6. [Format d'import (CSV / JSON)](#format-dimport-csv--json)
-7. [Sécurité : fonctionnement et limites](#sécurité--fonctionnement-et-limites)
+7. [Données : stockage et limites](#données--stockage-et-limites)
 8. [Calculs](#calculs)
 9. [Structure du code](#structure-du-code)
 
@@ -21,7 +21,7 @@ Application web de suivi de musculation, installable sur l'écran d'accueil, **1
 
 ## Fonctionnalités
 
-- **Accès protégé** : mot de passe créé au premier lancement, données chiffrées (AES-GCM 256, PBKDF2-SHA256 600 000 itérations), délai croissant après des échecs, bouton « Verrouiller », changement de mot de passe.
+- **Ouverture directe**, sans mot de passe : les données restent sur le téléphone. Mode démo dans Réglages → Données et mode démo.
 - **Séance** : démarrage depuis un modèle (Haut A, Bas A, Haut B, Bas B pré-chargés), séries pré-remplies avec la dernière fois, référence « Dernière fois : 8 × 50 kg, RPE 8 », suggestion de double progression (jamais appliquée automatiquement), saisie à boutons +/- (pas 0,5 / 1 / 2,5 kg ou saisie libre), puces RPE 6-10, « Copier la précédente », série « non faite », superset, exercice sauté / ajouté / remplacé / réordonné, minuteur de repos non bloquant, écran maintenu allumé, sauvegarde continue (reprise exacte après fermeture).
 - **Records personnels** détectés à la validation (1RM estimé, charge max, reps max à une charge).
 - **Historique** filtrable (séance, exercice, période), chaque séance est modifiable (date, n° de semaine, séries).
@@ -40,7 +40,7 @@ Prérequis : Node.js 20 ou plus récent.
 ```bash
 npm install
 npm run dev        # http://localhost:5173
-npm test           # tests unitaires (calculs, chiffrement, import)
+npm test           # tests unitaires (calculs, stockage, import)
 npm run build      # build de production dans dist/
 npm run preview    # sert dist/ en local
 ```
@@ -77,7 +77,7 @@ Chaque nouveau push redéploie l'app. Une fois ouverte, l'app propose « Nouvell
 
 **Sauvegarder** : Réglages → Sauvegarde et import → **Exporter (JSON chiffré)**. Choisis un mot de passe pour le fichier, puis « Enregistrer dans Fichiers » (iCloud Drive conseillé). Un rappel s'affiche sur l'accueil après 30 jours sans export.
 
-**Restaurer / changer de téléphone** : installe l'app sur le nouvel appareil, crée un mot de passe, puis Réglages → Sauvegarde et import → **Importer un fichier…** → choisis le `.json`. Saisis le mot de passe du fichier s'il est chiffré, puis confirme : la restauration **remplace** toutes les données.
+**Restaurer / changer de téléphone** : installe l'app sur le nouvel appareil, puis Réglages → Sauvegarde et import → **Importer un fichier…** → choisis le `.json`. Saisis le mot de passe du fichier s'il est chiffré, puis confirme : la restauration **remplace** toutes les données.
 
 **CSV** : les exports CSV (journal, séances, mensurations, bibliothèque) servent à analyser tes données dans Excel. Ils ne sont **pas chiffrés** et ne remplacent pas la sauvegarde JSON.
 
@@ -152,23 +152,22 @@ Date;Poids (kg);Tour de taille (cm);Tour de bras (cm);Tour de cuisse (cm);Tour d
 
 **Conseil pour exporter depuis Excel** : *Fichier → Enregistrer sous → CSV UTF-8 (délimité par des points-virgules)*, une feuille à la fois.
 
-## Sécurité : fonctionnement et limites
+## Données : stockage et limites
 
 **Fonctionnement**
-- Au premier lancement, une clé de données aléatoire (256 bits) est générée. Elle chiffre toutes les données (AES-GCM).
-- Cette clé est elle-même chiffrée par une clé dérivée de ton mot de passe (PBKDF2-SHA256, 600 000 itérations, sel aléatoire de 16 octets).
-- Le mot de passe n'est **jamais stocké**. Un mauvais mot de passe est détecté parce que le déchiffrement échoue (tag d'authentification GCM).
-- Changer de mot de passe ne ré-enveloppe que la clé de données : l'opération est instantanée et sans risque pour les données.
-- Après 3 échecs, un délai croissant s'impose : 5 s, 10 s, 20 s… jusqu'à 15 min maximum.
+- L'app s'ouvre directement, sans mot de passe. Les données sont enregistrées en continu dans le stockage local de l'app (IndexedDB), **uniquement sur l'appareil**. Rien n'est envoyé sur internet.
+- Le dépôt GitHub ne contient que le code : aucune donnée, aucun mot de passe, aucune clé.
+- L'export JSON peut être chiffré par un mot de passe propre au fichier (AES-GCM 256, clé dérivée par PBKDF2-SHA256, 600 000 itérations, sel aléatoire).
 
 **Limites**
-- **Mot de passe oublié = données perdues.** Aucune récupération n'est possible. Seule une sauvegarde JSON (dont tu connais le mot de passe) permet de repartir.
+- La protection repose sur le code de verrouillage du téléphone : quiconque a le téléphone déverrouillé peut lire l'app.
 - **Pas de synchronisation** entre appareils : il faut passer par export puis import.
-- Une fois l'app déverrouillée, toute personne qui tient le téléphone peut la lire. Il n'y a pas de verrouillage automatique (choix volontaire) : utilise le bouton cadenas.
-- Le délai après échecs ne protège que l'interface. Quelqu'un qui copierait le stockage du navigateur pourrait tester des mots de passe hors de l'app. **Un mot de passe long** (phrase de 4-5 mots) est la vraie protection.
+- Téléphone perdu, app supprimée ou stockage effacé = données perdues, sauf sauvegarde récente.
 - Les exports CSV et JSON non chiffrés sont lisibles par n'importe qui.
 
-**Piste pour une version 2 : synchronisation via Supabase** (à discuter avant toute implémentation). Authentification email + mot de passe Supabase, et données chiffrées **côté client** avec la même clé avant l'envoi, pour que le serveur ne voie que du contenu chiffré. Le modèle de données (un seul document chiffré) s'y prête directement.
+**Anciennes versions** : la première version chiffrait les données avec un mot de passe demandé à chaque ouverture. Si un tel coffre est présent, l'app demande ce mot de passe **une seule fois** pour convertir les données, puis ne le redemande plus. Sans lui, on peut repartir de zéro et restaurer une sauvegarde JSON.
+
+**Piste pour une version 2 : synchronisation via Supabase** (à discuter avant toute implémentation). Authentification email + mot de passe Supabase, et données chiffrées **côté client** avant l'envoi, pour que le serveur ne voie que du contenu chiffré. Le modèle de données (un seul document) s'y prête directement.
 
 ## Calculs
 
@@ -195,9 +194,9 @@ Exemples vérifiés par les tests : 8 × 20 kg → 160 kg / 25,33 kg, 8 × 50 kg
 src/
   domain/    types, formats FR, calculs purs (volume, 1RM, agrégats, PR, progression, deload), création de séance
   crypto/    primitives Web Crypto
-  db/        coffre chiffré IndexedDB, sauvegardes et exports CSV
+  db/        stockage IndexedDB, sauvegardes et exports CSV
   import/    analyse CSV / JSON tolérante
   seed/      bibliothèque + programme Upper / Lower, données de démo
   ui/        état (signals, annuler / rétablir), routeur, écrans et composants
-tests/       Vitest : calculs, chiffrement, import
+tests/       Vitest : calculs, stockage, chiffrement des exports, import
 ```

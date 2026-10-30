@@ -1,63 +1,61 @@
 import 'fake-indexeddb/auto'
 import { describe, expect, it } from 'vitest'
 import { buildExport, BackupPasswordError, readBackup } from '../src/db/backup'
-import { ThrottledError, throttleDelayMs, Vault, WrongPasswordError } from '../src/db/vault'
+import { Vault, WrongPasswordError } from '../src/db/vault'
+import { deriveKey, newDataKey, newKdfParams, seal, sealJSON } from '../src/crypto/crypto'
 import { initialData } from '../src/seed/initial'
 
 let n = 0
 const freshVault = () => new Vault(`test-${n++}`)
 
-describe('coffre chiffré', () => {
-  it('création puis déverrouillage avec le bon mot de passe', async () => {
+/** Écrit un coffre au format des anciennes versions (chiffré par mot de passe). */
+async function writeLegacy(dbName: string, password: string, value: unknown) {
+  const kdf = newKdfParams(1000)
+  const { key, raw } = await newDataKey()
+  const header = { v: 1, kdf, wrapped: await seal(await deriveKey(password, kdf), raw) }
+  const data = await sealJSON(key, value)
+  await new Promise<void>((resolve, reject) => {
+    const req = indexedDB.open(dbName, 1)
+    req.onupgradeneeded = () => req.result.createObjectStore('kv')
+    req.onsuccess = () => {
+      const t = req.result.transaction('kv', 'readwrite')
+      t.objectStore('kv').put(header, 'header')
+      t.objectStore('kv').put(data, 'data')
+      t.oncomplete = () => { req.result.close(); resolve() }
+      t.onerror = () => reject(t.error)
+    }
+  })
+}
+
+describe('stockage local', () => {
+  it('premier lancement vide, puis relecture après enregistrement', async () => {
     const v = freshVault()
+    expect(await v.load()).toBeUndefined()
+    expect(await v.hasLegacy()).toBe(false)
     const data = initialData()
-    await v.create('Correct horse 1', data)
-    v.lock()
-    const out = await new Vault(v.dbName).unlock<typeof data>('Correct horse 1')
-    expect(out.exercises.length).toBe(data.exercises.length)
+    void v.save({ old: true })
+    await v.save(data)
+    const out = await new Vault(v.dbName).load<typeof data>()
+    expect(out?.exercises.length).toBe(data.exercises.length)
   })
 
-  it('les données ne sont pas stockées en clair', async () => {
+  it('conversion d’un ancien coffre chiffré', async () => {
     const v = freshVault()
-    await v.create('secret-pass', { marqueur: 'Développé couché barre' })
-    const raw = await new Promise<unknown>((resolve) => {
-      const req = indexedDB.open(v.dbName)
-      req.onsuccess = () => {
-        const g = req.result.transaction('kv').objectStore('kv').get('data')
-        g.onsuccess = () => resolve(g.result)
-      }
-    })
-    expect(JSON.stringify(raw)).not.toContain('Développé')
-    expect(JSON.stringify(raw)).not.toContain('secret-pass')
+    await writeLegacy(v.dbName, 'ancien-mdp', { x: 42 })
+    expect(await v.hasLegacy()).toBe(true)
+    expect(await v.load()).toBeUndefined()
+    await expect(v.migrate('faux')).rejects.toBeInstanceOf(WrongPasswordError)
+    expect(await v.hasLegacy()).toBe(true)
+    await expect(v.migrate('ancien-mdp')).resolves.toEqual({ x: 42 })
+    expect(await v.hasLegacy()).toBe(false)
+    expect(await new Vault(v.dbName).load()).toEqual({ x: 42 })
   })
 
-  it('échec avec un mauvais mot de passe, puis délai croissant', async () => {
+  it('abandon d’un ancien coffre', async () => {
     const v = freshVault()
-    await v.create('bon-mot-de-passe', { a: 1 })
-    v.lock()
-    const t0 = 1_000_000
-    for (let i = 0; i < 2; i++) await expect(v.unlock('faux', t0)).rejects.toBeInstanceOf(WrongPasswordError)
-    const third = await v.unlock('faux', t0).catch((e) => e)
-    expect(third).toBeInstanceOf(WrongPasswordError)
-    expect((third as WrongPasswordError).waitMs).toBe(5_000)
-    // Pendant le délai, même le bon mot de passe est refusé.
-    await expect(v.unlock('bon-mot-de-passe', t0 + 1_000)).rejects.toBeInstanceOf(ThrottledError)
-    // Après le délai, ça passe et le compteur repart à zéro.
-    await expect(v.unlock('bon-mot-de-passe', t0 + 6_000)).resolves.toEqual({ a: 1 })
-    expect(await v.remainingWaitMs(t0 + 6_000)).toBe(0)
-    expect(throttleDelayMs(4)).toBe(10_000)
-    expect(throttleDelayMs(50)).toBe(15 * 60_000)
-  })
-
-  it('changement de mot de passe', async () => {
-    const v = freshVault()
-    await v.create('ancien', { x: 42 })
-    await expect(v.changePassword('pas le bon', 'nouveau')).rejects.toBeInstanceOf(WrongPasswordError)
-    await v.changePassword('ancien', 'nouveau')
-    await v.save({ x: 43 })
-    v.lock()
-    await expect(v.unlock('ancien')).rejects.toBeInstanceOf(WrongPasswordError)
-    await expect(v.unlock('nouveau')).resolves.toEqual({ x: 43 })
+    await writeLegacy(v.dbName, 'oublié', { x: 1 })
+    await v.dropLegacy()
+    expect(await v.hasLegacy()).toBe(false)
   })
 })
 

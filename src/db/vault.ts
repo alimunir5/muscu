@@ -1,26 +1,16 @@
-// Coffre chiffré dans IndexedDB. Rien n'est jamais écrit en clair, hormis
-// les paramètres de dérivation (sel, itérations) et le compteur d'échecs.
-import {
-  deriveKey, importDataKey, newDataKey, newKdfParams, open, openJSON, seal, sealJSON,
-  type KdfParams, type Sealed,
-} from '../crypto/crypto'
+// Stockage local dans IndexedDB (sans mot de passe). Les données restent sur
+// l'appareil ; seul l'export JSON peut être chiffré.
+// Les anciennes versions chiffraient tout avec un mot de passe : `migrate`
+// déchiffre ce coffre une dernière fois pour le convertir.
+import { deriveKey, importDataKey, open, openJSON, type KdfParams, type Sealed } from '../crypto/crypto'
 
 const STORE = 'kv'
+const STATE = 'state'
 
-interface VaultHeader { v: 1; kdf: KdfParams; wrapped: Sealed }
-interface Attempts { fails: number; until: number }
+interface LegacyHeader { v: 1; kdf: KdfParams; wrapped: Sealed }
 
 export class WrongPasswordError extends Error {
-  constructor(public waitMs: number) { super('Mot de passe incorrect') }
-}
-export class ThrottledError extends Error {
-  constructor(public waitMs: number) { super('Trop de tentatives') }
-}
-
-/** Délai imposé après `fails` échecs : rien jusqu'à 3, puis 5 s, 10 s, 20 s… (max 15 min). */
-export function throttleDelayMs(fails: number): number {
-  if (fails < 3) return 0
-  return Math.min(5_000 * 2 ** (fails - 3), 15 * 60_000)
+  constructor() { super('Mot de passe incorrect') }
 }
 
 // ---------- Mini-wrapper IndexedDB ----------
@@ -46,7 +36,6 @@ function tx<T>(db: IDBDatabase, mode: IDBTransactionMode, fn: (s: IDBObjectStore
 
 export class Vault {
   private db: IDBDatabase | null = null
-  private dek: CryptoKey | null = null
   private queue: Promise<unknown> = Promise.resolve()
 
   constructor(public readonly dbName = 'muscu') {}
@@ -61,63 +50,14 @@ export class Vault {
     await tx(await this.conn(), 'readwrite', (s) => s.put(value, key))
   }
 
-  async exists(): Promise<boolean> {
-    return (await this.get<VaultHeader>('header')) !== undefined
+  /** Données enregistrées, ou undefined au premier lancement. */
+  load<T>(): Promise<T | undefined> {
+    return this.get<T>(STATE)
   }
 
-  get unlocked() { return this.dek !== null }
-
-  /** Premier lancement : crée le coffre et y enregistre les données initiales. */
-  async create(password: string, initial: unknown): Promise<void> {
-    if (await this.exists()) throw new Error('Un coffre existe déjà sur cet appareil.')
-    const kdf = newKdfParams()
-    const kek = await deriveKey(password, kdf)
-    const { key, raw } = await newDataKey()
-    await this.put('header', { v: 1, kdf, wrapped: await seal(kek, raw) } satisfies VaultHeader)
-    this.dek = key
-    await this.save(initial)
-  }
-
-  async remainingWaitMs(now = Date.now()): Promise<number> {
-    const a = await this.get<Attempts>('attempts')
-    return a ? Math.max(0, a.until - now) : 0
-  }
-
-  private async unwrap(password: string): Promise<CryptoKey> {
-    const header = await this.get<VaultHeader>('header')
-    if (!header) throw new Error('Aucun coffre sur cet appareil.')
-    const kek = await deriveKey(password, header.kdf)
-    const raw = await open(kek, header.wrapped) // lève si mauvais mot de passe
-    return importDataKey(raw)
-  }
-
-  /** Déverrouille et renvoie les données déchiffrées. */
-  async unlock<T>(password: string, now = Date.now()): Promise<T> {
-    const wait = await this.remainingWaitMs(now)
-    if (wait > 0) throw new ThrottledError(wait)
-    let key: CryptoKey
-    try {
-      key = await this.unwrap(password)
-    } catch (e) {
-      if (e instanceof Error && e.message.startsWith('Aucun')) throw e
-      const prev = (await this.get<Attempts>('attempts'))?.fails ?? 0
-      const fails = prev + 1
-      const delay = throttleDelayMs(fails)
-      await this.put('attempts', { fails, until: now + delay } satisfies Attempts)
-      throw new WrongPasswordError(delay)
-    }
-    await this.put('attempts', { fails: 0, until: 0 } satisfies Attempts)
-    this.dek = key
-    const sealed = await this.get<Sealed>('data')
-    if (!sealed) throw new Error('Données introuvables.')
-    return openJSON<T>(key, sealed)
-  }
-
-  /** Enregistre (chiffré) ; les écritures sont sérialisées pour éviter toute course. */
+  /** Enregistre ; les écritures sont sérialisées pour éviter toute course. */
   save(data: unknown): Promise<void> {
-    const key = this.dek
-    if (!key) return Promise.reject(new Error('Coffre verrouillé'))
-    const job = this.queue.then(async () => this.put('data', await sealJSON(key, data)))
+    const job = this.queue.then(() => this.put(STATE, data))
     this.queue = job.catch(() => undefined)
     return job
   }
@@ -125,33 +65,33 @@ export class Vault {
   /** Attend la fin des écritures en cours. */
   flush(): Promise<unknown> { return this.queue }
 
-  /** Ré-enveloppe la clé de données avec le nouveau mot de passe. */
-  async changePassword(oldPassword: string, newPassword: string): Promise<void> {
-    const header = await this.get<VaultHeader>('header')
-    if (!header) throw new Error('Aucun coffre.')
-    let raw: Uint8Array<ArrayBuffer>
-    try {
-      raw = await open(await deriveKey(oldPassword, header.kdf), header.wrapped)
-    } catch {
-      throw new WrongPasswordError(0)
-    }
-    const kdf = newKdfParams()
-    const wrapped = await seal(await deriveKey(newPassword, kdf), raw)
-    await this.put('header', { v: 1, kdf, wrapped } satisfies VaultHeader)
+  /** Un coffre chiffré d'une ancienne version attend d'être converti. */
+  async hasLegacy(): Promise<boolean> {
+    return (await this.get<LegacyHeader>('header')) !== undefined
   }
 
-  lock(): void { this.dek = null }
+  /** Déchiffre l'ancien coffre, l'enregistre en clair puis supprime la version chiffrée. */
+  async migrate<T>(password: string, check: (d: unknown) => T = (d) => d as T): Promise<T> {
+    const header = await this.get<LegacyHeader>('header')
+    const sealed = await this.get<Sealed>('data')
+    if (!header || !sealed) throw new Error('Aucune ancienne donnée à convertir.')
+    let decrypted: unknown
+    try {
+      const raw = await open(await deriveKey(password, header.kdf), header.wrapped)
+      decrypted = await openJSON(await importDataKey(raw), sealed)
+    } catch {
+      throw new WrongPasswordError()
+    }
+    const data = check(decrypted) // valide avant d'écrire quoi que ce soit
+    await this.save(data)
+    await this.dropLegacy()
+    return data
+  }
 
-  /** Efface définitivement le coffre de cet appareil. */
-  async destroy(): Promise<void> {
-    this.lock()
-    this.db?.close()
-    this.db = null
-    await new Promise<void>((resolve, reject) => {
-      const req = indexedDB.deleteDatabase(this.dbName)
-      req.onsuccess = () => resolve()
-      req.onerror = () => reject(req.error)
-      req.onblocked = () => resolve()
+  /** Abandonne l'ancien coffre (mot de passe oublié). */
+  async dropLegacy(): Promise<void> {
+    await tx(await this.conn(), 'readwrite', (s) => {
+      for (const k of ['header', 'data', 'attempts']) s.delete(k)
     })
   }
 }

@@ -4,13 +4,12 @@ import { RPE_SCALE } from '../../domain/calc'
 import { cleanName, fmtDate, fmtDuration, isValidISO, nameKey, uid } from '../../domain/format'
 import type { Equipment, Exercise, Template, TemplateItem, VolumeMode } from '../../domain/types'
 import { bodyCsv, buildExport, journalCsv, libraryCsv, sessionsCsv } from '../../db/backup'
-import { WrongPasswordError } from '../../db/vault'
 import { Empty, Icon, NumField, Toggle, TopBar } from '../components/common'
 import { pickExercise } from '../components/ExercisePicker'
 import { confirmDialog, promptDialog, toast } from '../dialogs'
 import { saveFile, stamp } from '../download'
 import { back, go } from '../router'
-import { D, demo, lock, mutate, vault } from '../store'
+import { D, demo, exitDemo, mutate, startDemo } from '../store'
 
 const EQUIPMENTS: Equipment[] = ['barre', 'haltères', 'machine', 'poulie', 'poids de corps', 'autre']
 const VOLUME_MODES: { v: VolumeMode; label: string }[] = [
@@ -30,7 +29,7 @@ export function SettingsHome() {
     ['/reglages/saisie', 'Saisie et minuteur', 'Pas des charges, son, vibration, notification'],
     ['/reglages/rpe', 'Échelle RPE', 'Repères RPE / reps en réserve'],
     ['/reglages/sauvegarde', 'Sauvegarde et import', 'Export JSON / CSV, restauration, import Excel'],
-    ['/reglages/securite', 'Sécurité', 'Mot de passe, verrouillage, limites'],
+    ['/reglages/donnees', 'Données et mode démo', 'Où sont stockées tes données, limites, démo'],
   ]
   return (
     <>
@@ -39,7 +38,7 @@ export function SettingsHome() {
         {demo.value && (
           <section class="card notice">
             <p><strong>Mode démo.</strong> Données fictives, rien n’est enregistré. Tes vraies données ne sont jamais touchées.</p>
-            <button class="btn small" onClick={() => void lock()}>Quitter le mode démo</button>
+            <button class="btn small" onClick={() => void exitDemo()}>Quitter le mode démo</button>
           </section>
         )}
         <ul class="list cards">
@@ -52,7 +51,7 @@ export function SettingsHome() {
             </li>
           ))}
         </ul>
-        <p class="muted small center">Muscu · données chiffrées sur cet appareil uniquement</p>
+        <p class="muted small center">Muscu · données sur cet appareil uniquement</p>
       </main>
     </>
   )
@@ -459,7 +458,7 @@ export function BackupSettings() {
     let pw: string | undefined
     if (encrypted) {
       const p = await promptDialog('Export chiffré', 'Mot de passe de la sauvegarde', '', {
-        type: 'password', message: 'Choisis un mot de passe pour ce fichier (il peut être différent de celui de l’app). Sans lui, le fichier est illisible.',
+        type: 'password', message: 'Choisis un mot de passe pour ce fichier. Sans lui, le fichier est illisible.',
         validate: (v) => (v.length >= 8 ? null : 'Au moins 8 caractères'),
       })
       if (!p) return
@@ -510,45 +509,32 @@ export function BackupSettings() {
   )
 }
 
-// ---------- Sécurité ----------
+// ---------- Données et confidentialité ----------
 
-export function SecuritySettings() {
-  const change = async () => {
-    if (demo.value) return toast('Indisponible en mode démo')
-    const old = await promptDialog('Changer le mot de passe', 'Mot de passe actuel', '', { type: 'password', validate: (v) => (v ? null : 'Requis') })
-    if (!old) return
-    const n1 = await promptDialog('Changer le mot de passe', 'Nouveau mot de passe', '', { type: 'password', validate: (v) => (v.length >= 8 ? null : 'Au moins 8 caractères') })
-    if (!n1) return
-    const n2 = await promptDialog('Changer le mot de passe', 'Confirme le nouveau mot de passe', '', { type: 'password', validate: (v) => (v === n1 ? null : 'Les mots de passe diffèrent') })
-    if (!n2) return
-    try {
-      await vault.changePassword(old, n1)
-      toast('Mot de passe changé')
-    } catch (e) {
-      toast(e instanceof WrongPasswordError ? 'Mot de passe actuel incorrect' : (e as Error).message, { kind: 'error' })
-    }
-  }
+export function DataSettings() {
   return (
     <>
-      {sub('Sécurité')}
+      {sub('Données')}
       <main class="page">
-        <section class="card">
-          <button class="btn full" onClick={() => void lock()}><Icon name="lock" /> Verrouiller maintenant</button>
-          <button class="btn full" onClick={change}>Changer le mot de passe</button>
-        </section>
+        {!demo.value && (
+          <section class="card">
+            <p class="muted small">Explore l’app avec 10 semaines de données fictives. Tes vraies données ne sont pas touchées.</p>
+            <button class="btn full" onClick={() => void startDemo()}>Essayer le mode démo</button>
+          </section>
+        )}
         <section class="card prose">
-          <h2>Ce que protège le chiffrement</h2>
+          <h2>Où sont tes données</h2>
           <ul>
-            <li>Tes données sont chiffrées sur l’appareil (AES-GCM 256, clé dérivée du mot de passe par PBKDF2-SHA256, 600 000 itérations, sel aléatoire). Le mot de passe n’est stocké nulle part.</li>
+            <li>Uniquement sur ce téléphone, dans le stockage de l’app. Rien n’est envoyé sur internet.</li>
             <li>Le dépôt GitHub ne contient que le code : aucune donnée, aucun mot de passe, aucune clé.</li>
+            <li>L’app s’ouvre sans mot de passe : le code de verrouillage du téléphone la protège.</li>
           </ul>
           <h2>Les limites</h2>
           <ul>
-            <li><strong>Mot de passe oublié = données perdues.</strong> Personne ne peut les récupérer. Fais des exports réguliers.</li>
-            <li><strong>Pas de synchronisation</strong> : les données restent sur cet appareil. Pour changer de téléphone : export puis import.</li>
-            <li>iOS peut effacer les données d’un site web non utilisé pendant plusieurs semaines si l’app n’est <em>pas</em> installée sur l’écran d’accueil. Installée, elle est protégée de ce nettoyage, mais garde des exports.</li>
-            <li>Une fois déverrouillée, l’app est lisible par qui tient le téléphone : verrouille-la si besoin.</li>
-            <li>Le délai après échecs ne protège que l’interface : quelqu’un qui copierait le stockage pourrait tester des mots de passe hors de l’app. Un mot de passe long (phrase de 4-5 mots) est la vraie protection.</li>
+            <li><strong>Pas de synchronisation</strong> : pour changer de téléphone, export puis import.</li>
+            <li>Téléphone perdu ou app supprimée = données perdues, sauf export récent. Fais des exports réguliers (le JSON peut être chiffré par un mot de passe).</li>
+            <li>iOS peut effacer les données d’un site web non utilisé pendant plusieurs semaines si l’app n’est <em>pas</em> installée sur l’écran d’accueil. Installée, elle est protégée de ce nettoyage.</li>
+            <li>Les exports CSV et JSON non chiffrés sont lisibles par n’importe qui.</li>
           </ul>
         </section>
       </main>
