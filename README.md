@@ -1,6 +1,6 @@
 # Muscu — carnet de musculation (PWA)
 
-Application web de suivi de musculation, installable sur l'écran d'accueil, **100 % hors ligne**, avec des données qui restent **sur l'appareil**. Elle remplace un classeur Excel (Dashboard, Bibliothèque & Réglages, Journal des séances).
+Pour remplacer un classeur Excel de suivi de musculation par un carnet utilisable pendant la séance, même sans réseau, cette PWA installable (Vite, TypeScript, Preact) enregistre les séances, les records et la progression en IndexedDB, **100 % hors ligne** et **sur l'appareil**.
 
 - **Stack** : Vite + TypeScript + Preact (+ signals), Chart.js chargé à la demande, IndexedDB, Web Crypto, vite-plugin-pwa (Workbox).
 - **Aucun backend.** Le dépôt ne contient que du code : aucun mot de passe, aucune donnée, aucune clé.
