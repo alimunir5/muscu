@@ -239,7 +239,7 @@ export function progressionSuggestion(
 
 export function intensityHint(ex: Pick<Exercise, 'compound' | 'kind'>): string {
   if (ex.kind === 'check') return ''
-  return ex.compound ? 'Cible : RPE 8-9 (1 à 2 reps en réserve)' : 'Cible : RPE 9-10 sur la dernière série'
+  return 'Cible : RPE 8-9, finir chaque série à 1-2 reps de l’échec'
 }
 
 // ---------- Deload ----------
@@ -251,10 +251,13 @@ export function deloadDue(currentWeek: number, s: Pick<Settings, 'deloadEvery' |
   return currentWeek - last >= s.deloadEvery
 }
 
-/** Charge allégée (~60 %) arrondie au pas. */
+/** Séries d'une séance de deload : 2 au lieu de 3-4. */
+export const DELOAD_SETS = 2
+
+/** Charge allégée (environ −10 %) arrondie au pas. */
 export function deloadLoad(load: number, step: number): number {
   const s = step > 0 ? step : 0.5
-  return round2(Math.round((load * 0.6) / s) * s)
+  return round2(Math.round((load * 0.9) / s) * s)
 }
 
 export const RPE_SCALE: { rpe: number; label: string }[] = [

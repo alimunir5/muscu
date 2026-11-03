@@ -5,7 +5,8 @@ import {
 } from '../src/domain/calc'
 import { addDaysISO, fmtDate, parseDecimal, parseFrDate, programWeek, repairDate } from '../src/domain/format'
 import type { AppData, Exercise, Session, SetEntry } from '../src/domain/types'
-import { initialData } from '../src/seed/initial'
+import { applyProgram, initialData, PROGRAM_REVISION } from '../src/seed/initial'
+import { buildEntry } from '../src/domain/workout'
 
 const charge: Pick<Exercise, 'volumeMode' | 'unilateral'> = { volumeMode: 'charge', unilateral: false }
 const set = (reps: number | null, load: number | null, extra: Partial<SetEntry> = {}): SetEntry =>
@@ -139,8 +140,8 @@ describe('records, progression, deload, validation', () => {
     expect(deloadDue(7, { ...s, deloadDismissedWeek: 7 })).toBe(false)
     expect(deloadDue(10, { ...s, deloadWeeks: [7] })).toBe(false)
     expect(deloadDue(14, { ...s, deloadWeeks: [7] })).toBe(true)
-    expect(deloadLoad(100, 2.5)).toBe(60)
-    expect(deloadLoad(52.5, 2.5)).toBe(32.5)
+    expect(deloadLoad(100, 2.5)).toBe(90)
+    expect(deloadLoad(52.5, 2.5)).toBe(47.5)
   })
   it('validation RPE', () => {
     expect(validateRpe(8)).toBeNull()
@@ -154,5 +155,67 @@ describe('records, progression, deload, validation', () => {
     expect(d.templates.map((t) => t.name)).toEqual(['Haut A', 'Bas A', 'Haut B', 'Bas B'])
     expect(d.settings.trackedExerciseIds).toHaveLength(4)
     expect(addDaysISO('2026-12-31', 1)).toBe('2027-01-01')
+  })
+})
+
+describe('programme Upper / Lower 4 jours', () => {
+  it('planning et prescriptions', () => {
+    const d = initialData()
+    expect(d.templates.map((t) => [t.name, t.day])).toEqual([['Haut A', 1], ['Bas A', 2], ['Haut B', 4], ['Bas B', 5]])
+    expect(d.settings.sessionsPerWeek).toBe(4)
+    const name = (id: string) => d.exercises.find((e) => e.id === id)!.name
+    const bas = d.templates[3].items[0]
+    expect([name(bas.exerciseId), bas.sets, bas.repMin, bas.repMax, bas.restSec]).toEqual(['Soulevé de terre', 4, 4, 6, 180])
+    expect(d.templates.map((t) => t.items.length)).toEqual([7, 6, 7, 6])
+  })
+
+  it('migration d’anciennes données : modèles remplacés, historique conservé', () => {
+    const d = initialData()
+    // Ancien programme full body 3 jours avec une séance réalisée.
+    const squat = d.exercises.find((e) => e.name === 'Squat barre')!.id
+    const full = ['Full body A', 'Full body B', 'Full body C'].map((name) => ({ id: name, name, items: [{ id: 'i' + name, exerciseId: squat, sets: 3, repMin: 8, repMax: 10, restSec: 120 }] }))
+    d.templates = full
+    d.settings.templateOrder = full.map((t) => t.id)
+    d.settings.sessionsPerWeek = 3
+    d.settings.programRevision = 1
+    const session: Session = {
+      id: 's1', date: '2026-10-20', name: 'Full body A', templateId: 'Full body A', status: 'done', note: '',
+      entries: [{ id: 'e1', exerciseId: squat, restSec: 120, note: '', sets: [set(8, 80)] }],
+    }
+    d.sessions.push(session)
+    const before = structuredClone(d.sessions)
+    const nbEx = d.exercises.length
+
+    applyProgram(d)
+    expect(d.sessions).toEqual(before)
+    expect(d.templates.map((t) => t.name)).toEqual(['Haut A', 'Bas A', 'Haut B', 'Bas B'])
+    expect(d.settings.templateOrder).toEqual(d.templates.map((t) => t.id))
+    expect(d.settings.sessionsPerWeek).toBe(4)
+    expect(d.settings.programRevision).toBe(PROGRAM_REVISION)
+    expect(d.exercises).toHaveLength(nbEx) // exercices existants réutilisés
+    // La dernière performance au squat sert toujours de pré-remplissage.
+    const item = d.templates[1].items[0]
+    expect(buildEntry(d, item.exerciseId, item).sets[0].load).toBe(80)
+  })
+
+  it('ajoute les exercices manquants et garde le même modèle quand le nom correspond', () => {
+    const d = initialData()
+    const hautA = d.templates[0].id
+    d.exercises = d.exercises.filter((e) => e.name !== 'Curl barre EZ')
+    applyProgram(d)
+    expect(d.templates[0].id).toBe(hautA)
+    expect(d.exercises.filter((e) => e.name === 'Curl barre EZ')).toHaveLength(1)
+  })
+
+  it('deload : 2 séries et charges −10 %', () => {
+    const d = initialData()
+    const item = d.templates[0].items[0]
+    d.sessions.push({
+      id: 's', date: '2026-11-02', name: 'Haut A', templateId: d.templates[0].id, status: 'done', note: '',
+      entries: [{ id: 'e', exerciseId: item.exerciseId, restSec: 150, note: '', sets: [set(8, 100)] }],
+    })
+    const e = buildEntry(d, item.exerciseId, item, { deload: 'series' })
+    expect(e.sets).toHaveLength(2)
+    expect(e.sets[0].load).toBe(90)
   })
 })

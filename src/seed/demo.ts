@@ -5,6 +5,8 @@ import type { AppData, Session } from '../domain/types'
 import { initialData } from './initial'
 
 const START_LOAD: Record<string, number> = {
+  'Développé militaire haltères': 16, 'Curl barre EZ': 25, 'Fentes marchées haltères': 14, 'Crunch à la poulie': 30,
+  'Tractions prise neutre': 0, 'Rowing haltère un bras': 24, 'Oiseau (élévations arrière)': 6, 'Barre au front': 25,
   'Développé couché barre': 60, 'Rowing barre': 50, 'Développé militaire barre': 35, 'Tractions supination': 0,
   'Pushdown triceps': 22.5, 'Curl biceps barre': 25, 'Squat barre': 70, 'Soulevé de terre roumain': 60,
   'Fentes bulgares': 12, 'Leg curl': 35, 'Mollets debout': 60, 'Relevé de jambes suspendu': 0,

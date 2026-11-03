@@ -88,6 +88,13 @@ export function mondayOf(iso: ISODate): number {
   return n - dow
 }
 
+export const WEEKDAYS = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche']
+
+/** Jour de la semaine : 1 = lundi … 7 = dimanche. */
+export function isoWeekday(iso: ISODate): number {
+  return dayNumber(iso) - mondayOf(iso) + 1
+}
+
 /**
  * Numéro de semaine du programme : semaine 1 = semaine (lundi → dimanche)
  * contenant la date de début. Peut être ≤ 0 pour une date antérieure.

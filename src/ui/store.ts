@@ -5,7 +5,7 @@ import { programWeek, todayISO } from '../domain/format'
 import type { AppData, Session } from '../domain/types'
 import { normalizeData } from '../db/backup'
 import { Vault } from '../db/vault'
-import { initialData } from '../seed/initial'
+import { applyProgram, initialData, PROGRAM_REVISION } from '../seed/initial'
 import { buildDemoData } from '../seed/demo'
 
 export type Phase = 'loading' | 'migrate' | 'app'
@@ -108,7 +108,17 @@ if (typeof document !== 'undefined') {
 export async function boot() {
   try {
     const saved = await vault.load<AppData>()
-    if (saved) return enterApp(normalizeData(saved))
+    if (saved) {
+      const d = normalizeData(saved)
+      // Programme pré-chargé mis à jour depuis la dernière ouverture : on remplace
+      // les modèles de séance, l'historique reste intact.
+      if ((saved.settings?.programRevision ?? 1) < PROGRAM_REVISION) {
+        applyProgram(d)
+        enterApp(d)
+        return void saveNow()
+      }
+      return enterApp(d)
+    }
     if (await vault.hasLegacy()) { phase.value = 'migrate'; return }
   } catch (e) {
     readFailed = true

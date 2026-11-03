@@ -53,6 +53,8 @@ export interface TemplateItem {
 export interface Template {
   id: ID
   name: string
+  /** Jour prévu dans la semaine (1 = lundi … 7 = dimanche), facultatif. */
+  day?: number
   items: TemplateItem[]
 }
 
@@ -131,6 +133,8 @@ export interface Settings {
   deloadWeeks: number[]
   deloadDismissedWeek: number | null
   lastExportAt: number | null
+  /** Version du programme pré-chargé appliquée (voir src/seed/initial.ts). */
+  programRevision?: number
 }
 
 export interface AppData {

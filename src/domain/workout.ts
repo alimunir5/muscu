@@ -1,5 +1,5 @@
 // Création d'une séance à partir d'un modèle, pré-remplie avec la dernière fois.
-import { deloadLoad, isRealized, lastPerformance } from './calc'
+import { DELOAD_SETS, deloadLoad, isRealized, lastPerformance } from './calc'
 import { uid } from './format'
 import type { AppData, Exercise, ID, ISODate, Session, SessionEntry, SetEntry, TemplateItem } from './types'
 
@@ -21,14 +21,15 @@ export function buildEntry(
   const last = lastPerformance(data, exerciseId, { templateId: opts.templateId })
   const lastSets = last?.entry.sets.filter(isRealized) ?? []
   let count = item?.sets ?? (lastSets.length || 3)
-  if (opts.deload === 'series') count = Math.max(1, Math.ceil(count / 2))
+  // Deload complet : 2 séries et charges −10 % ; « charges » : charges −10 % seulement.
+  if (opts.deload === 'series') count = Math.min(count, DELOAD_SETS)
   const step = stepFor(data, ex)
   const planned = rangeLabel(item?.repMin, item?.repMax)
 
   const sets: SetEntry[] = ex?.kind === 'check' ? [] : Array.from({ length: count }, (_, i) => {
     const ref = lastSets[i] ?? lastSets[lastSets.length - 1]
     let load = ref?.load ?? null
-    if (load !== null && opts.deload === 'charges') load = deloadLoad(load, step)
+    if (load !== null && opts.deload) load = deloadLoad(load, step)
     return newSet(i + 1, { planned, load, reps: ref?.reps ?? item?.repMin ?? null })
   })
   return {

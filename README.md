@@ -22,7 +22,7 @@ Pour remplacer un classeur Excel de suivi de musculation par un carnet utilisabl
 ## Fonctionnalités
 
 - **Ouverture directe**, sans mot de passe : les données restent sur le téléphone. Mode démo dans Réglages → Données et mode démo.
-- **Séance** : démarrage depuis un modèle (Haut A, Bas A, Haut B, Bas B pré-chargés), séries pré-remplies avec la dernière fois, référence « Dernière fois : 8 × 50 kg, RPE 8 », suggestion de double progression (jamais appliquée automatiquement), saisie à boutons +/- (pas 0,5 / 1 / 2,5 kg ou saisie libre), puces RPE 6-10, « Copier la précédente », série « non faite », superset, exercice sauté / ajouté / remplacé / réordonné, minuteur de repos non bloquant, écran maintenu allumé, sauvegarde continue (reprise exacte après fermeture).
+- **Séance** : démarrage depuis un modèle (programme Upper / Lower 4 jours pré-chargé : Haut A lundi, Bas A mardi, Haut B jeudi, Bas B vendredi ; le modèle du jour est signalé), séries pré-remplies avec la dernière fois, référence « Dernière fois : 8 × 50 kg, RPE 8 », suggestion de double progression (jamais appliquée automatiquement), saisie à boutons +/- (pas 0,5 / 1 / 2,5 kg ou saisie libre), puces RPE 6-10, « Copier la précédente », série « non faite », superset, exercice sauté / ajouté / remplacé / réordonné, minuteur de repos non bloquant, écran maintenu allumé, sauvegarde continue (reprise exacte après fermeture).
 - **Records personnels** détectés à la validation (1RM estimé, charge max, reps max à une charge).
 - **Historique** filtrable (séance, exercice, période), chaque séance est modifiable (date, n° de semaine, séries).
 - **Fiche exercice** : courbes de 1RM estimé, charge max et volume par séance, records, historique des séries et notes.
@@ -181,8 +181,9 @@ Date;Poids (kg);Tour de taille (cm);Tour de bras (cm);Tour de cuisse (cm);Tour d
 | Séances réalisées | nombre de couples distincts (date, nom de séance) ayant au moins une série réalisée (ou un bloc coché) |
 | Taux de réalisation | min(100 %, réalisées / prévues), affiché « 3/4 » ; le surplus est indiqué à part |
 | 1RM de la semaine | meilleur 1RM estimé de la semaine ; les semaines sans données ne tracent pas de zéro |
+| Intensité | finir chaque série à 1-2 reps de l'échec (RPE 8-9) |
 | Double progression | toutes les séries prévues au haut de la fourchette → +2,5 kg (barre), +1 à 2 kg par haltère, +1 palier (machine / poulie), repartir au bas de la fourchette |
-| Deload | proposé quand `semaine − dernier deload ≥ N` (7 par défaut) ; options « charges à ~60 % » ou « moitié des séries » |
+| Deload | proposé quand `semaine − dernier deload ≥ N` (7 par défaut) ; par défaut 2 séries et charges −10 %, ou charges −10 % seules |
 
 Exemples vérifiés par les tests : 8 × 20 kg → 160 kg / 25,33 kg, 8 × 50 kg → 400 kg / 63,33 kg, 15 × 11,3 kg → 169,5 kg / 16,95 kg.
 

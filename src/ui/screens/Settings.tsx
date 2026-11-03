@@ -1,7 +1,7 @@
 // Réglages : programme, modèles, bibliothèque, saisie, sauvegarde, sécurité.
 import { useState } from 'preact/hooks'
 import { RPE_SCALE } from '../../domain/calc'
-import { cleanName, fmtDate, fmtDuration, isValidISO, nameKey, uid } from '../../domain/format'
+import { cleanName, fmtDate, fmtDuration, isValidISO, nameKey, uid, WEEKDAYS } from '../../domain/format'
 import type { Equipment, Exercise, Template, TemplateItem, VolumeMode } from '../../domain/types'
 import { bodyCsv, buildExport, journalCsv, libraryCsv, sessionsCsv } from '../../db/backup'
 import { Empty, Icon, NumField, Toggle, TopBar } from '../components/common'
@@ -10,6 +10,7 @@ import { confirmDialog, promptDialog, toast } from '../dialogs'
 import { saveFile, stamp } from '../download'
 import { back, go } from '../router'
 import { D, demo, exitDemo, mutate, startDemo } from '../store'
+import { PROGRESSION_RULES } from '../../seed/initial'
 
 const EQUIPMENTS: Equipment[] = ['barre', 'haltères', 'machine', 'poulie', 'poids de corps', 'autre']
 const VOLUME_MODES: { v: VolumeMode; label: string }[] = [
@@ -87,6 +88,10 @@ export function ProgramSettings() {
               <button class="link-btn small" onClick={() => upd('Réinitialiser les deloads', (x) => { x.deloadWeeks = []; x.deloadDismissedWeek = null })}>réinitialiser</button></p>
           )}
         </section>
+        <section class="card">
+          <h2>Règles de progression</h2>
+          <ul>{PROGRESSION_RULES.map((r) => <li key={r}>{r}</li>)}</ul>
+        </section>
         <p class="muted small">Ordre et liste des séances du programme : voir <a href="#/reglages/modeles">Modèles de séance</a>.</p>
       </main>
     </>
@@ -118,7 +123,7 @@ export function TemplatesList() {
         <ul class="list cards">
           {order.map((t, i) => (
             <li key={t.id} class="card row gap">
-              <a class="grow" href={`#/reglages/modeles/${t.id}`}><strong>{t.name}</strong><span class="muted small block">{t.items.length} exercices</span></a>
+              <a class="grow" href={`#/reglages/modeles/${t.id}`}><strong>{t.name}</strong><span class="muted small block">{t.day ? `${WEEKDAYS[t.day - 1]} · ` : ''}{t.items.length} exercices</span></a>
               <button class="icon-btn" disabled={i === 0} onClick={() => move(i, -1)} aria-label={`Monter ${t.name}`}><Icon name="up" /></button>
               <button class="icon-btn" disabled={i === order.length - 1} onClick={() => move(i, 1)} aria-label={`Descendre ${t.name}`}><Icon name="down" /></button>
             </li>
@@ -161,6 +166,11 @@ export function TemplateEdit({ id }: { id: string }) {
         }}><Icon name="note" /></button>
       } />
       <main class="page">
+        <label class="field"><span>Jour prévu</span>
+          <select value={t.day ?? ''} onChange={(e) => { const v = Number(e.currentTarget.value); edit('Jour prévu', (x) => { x.day = v || undefined }) }}>
+            <option value="">Aucun</option>
+            {WEEKDAYS.map((d, i) => <option key={d} value={i + 1}>{d}</option>)}
+          </select></label>
         {t.items.length === 0 && <Empty title="Modèle vide" text="Ajoute les exercices de cette séance." />}
         {t.items.map((it, i) => (
           <article key={it.id} class={`card ${it.superset ? 'superset' : ''}`}>

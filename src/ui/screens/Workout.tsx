@@ -1,6 +1,6 @@
 // Onglet Séance : choix du modèle puis saisie de la séance en cours.
 import { useEffect, useState } from 'preact/hooks'
-import { fmtDuration, isValidISO, programWeek, todayISO } from '../../domain/format'
+import { fmtDuration, isoWeekday, isValidISO, programWeek, todayISO, WEEKDAYS } from '../../domain/format'
 import type { Session } from '../../domain/types'
 import { startSession } from '../../domain/workout'
 import { Icon, TopBar } from '../components/common'
@@ -20,7 +20,8 @@ function Start() {
   const [date, setDate] = useState(todayISO())
   const week = programWeek(date, data.settings.programStart)
   const isDeloadWeek = data.settings.deloadWeeks.includes(week)
-  const [deload, setDeload] = useState<Session['deload'] | ''>(isDeloadWeek ? 'charges' : '')
+  const [deload, setDeload] = useState<Session['deload'] | ''>(isDeloadWeek ? 'series' : '')
+  const weekday = isValidISO(date) ? isoWeekday(date) : 0
   const templates = data.settings.templateOrder.map((id) => data.templates.find((t) => t.id === id)).filter((t) => !!t)
 
   const start = (templateId: string | null) => {
@@ -39,7 +40,7 @@ function Start() {
         {isDeloadWeek && (
           <fieldset class="card notice">
             <legend>Semaine allégée (deload)</legend>
-            {([['charges', 'Charges à ~60 %'], ['series', 'Moitié des séries'], ['', 'Séance normale']] as const).map(([v, l]) => (
+            {([['series', '2 séries, charges −10 %'], ['charges', 'Charges −10 % seulement'], ['', 'Séance normale']] as const).map(([v, l]) => (
               <label key={v} class="radio"><input type="radio" name="deload" checked={deload === v} onChange={() => setDeload(v)} /> {l}</label>
             ))}
           </fieldset>
@@ -51,6 +52,7 @@ function Start() {
               <button class="card template-btn" onClick={() => start(t.id)}>
                 <span class="grow">
                   <strong>{t.name}</strong>
+                  {t.day && <span class={`pill ${t.day === weekday ? 'warn' : ''}`}>{WEEKDAYS[t.day - 1]}{t.day === weekday && ' · aujourd’hui'}</span>}
                   <span class="muted small block">{t.items.map((it) => data.exercises.find((e) => e.id === it.exerciseId)?.name).filter(Boolean).join(' · ')}</span>
                 </span>
                 <Icon name="chevron" />

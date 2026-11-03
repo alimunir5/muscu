@@ -42,7 +42,7 @@ export function SessionHeader({ session, mode }: { session: Session; mode: Mode 
           const name = await promptDialog('Nom de la séance', 'Nom', session.name, { validate: (v) => (v.trim() ? null : 'Nom requis') })
           if (name) editSession(session.id, 'Renommer la séance', (s) => { s.name = name.trim() })
         }}><h2>{session.name}</h2></button>
-        {session.deload && <span class="pill warn">Deload · {session.deload === 'charges' ? 'charges ~60 %' : 'moitié des séries'}</span>}
+        {session.deload && <span class="pill warn">Deload · {session.deload === 'charges' ? 'charges réduites' : 'séries et charges réduites'}</span>}
       </div>
       <div class="grid2">
         <label class="field">
